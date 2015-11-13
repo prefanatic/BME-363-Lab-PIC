@@ -1,0 +1,4 @@
+Warning[2054] main.c 335 : suspicious pointer conversion
+Warning[2054] main.c 336 : suspicious pointer conversion
+Warning[2054] main.c 337 : suspicious pointer conversion
+Warning[2058] main.c 441 : call of function without prototype
