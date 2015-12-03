@@ -7,7 +7,7 @@
 /*********************************************************************************************/
 
 /**************************** Specify the chip that we are using *****************************/ 
-//#include <p18cxxx.h>
+//#include <p18cxxx.h> // We don't need this - MPLAB injects it depending on the type of PIC we have set up.
 #include <timers.h>
 #include <math.h>
 #include <stdlib.h>
@@ -42,13 +42,14 @@ void ClearScreen();
 void SetupADC(unsigned char channel);
 void Delay_ms(unsigned int x);
 void Transmit(unsigned char value);
-void TransmitGraphData(unsigned char value);
+void TransmitGraphData(unsigned char tag, unsigned char value);
+void TransmitFunction();
 
 /************************************** Global variables *************************************/
 unsigned char function, mode, update, debounce0, debounce1, LEDcount, output, counter, i, j;
 unsigned char data0, data1, data2, array[9], rank[9], do_median, do_MOBD, refractory, display;
 unsigned char temp, sampling[16], TMRcntH[16], TMRcntL[16], sampling_H, sampling_L;
-unsigned char bluetoothEnabled; // BLUETOOTH
+unsigned char bluetoothEnabled, needToTransferOriginal, needToTransferModified; // BLUETOOTH
 int dummy, d0, d1, d2, mobd, threshold, rri_count, hr;
 
 unsigned char ReadADC() { /************* start A/D, read from an A/D channel *****************/
@@ -139,11 +140,15 @@ checkflags:
 				}
 				break;
 			}
-            TransmitGraphData(output);
+            //TransmitGraphData(1, output);
+            needToTransferOriginal = 1;
 			PORTD = output;
 			break;
 		case 2:						// Function 2: Echo
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
+            //TransmitGraphData(1, data0);
+            output = data0;
+            needToTransferOriginal = 1;
 			PORTD = data0;			// Echo back 
 			PORTBbits.RB4 = !PORTBbits.RB4;		// Toggle RB4 (pin 37) for frequency check
 			break;
@@ -151,6 +156,9 @@ checkflags:
 			TMR0H = sampling_H;		// Reload TMR0 high-order byte
 			TMR0L = sampling_L;		// Reload TMR0 low-order byte
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
+            //TransmitGraphData(1, data0);
+            output = data0;
+            needToTransferOriginal = 1;
 			PORTD = data0;			// Echo back 
 			PORTBbits.RB4 = !PORTBbits.RB4;		// Toggle RB4 (pin 37) for frequency check
 			break;
@@ -158,6 +166,12 @@ checkflags:
 			data1 = data0;			// Store previous data points
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = (int)data0 - data1 + 128;	// Take derivative and shift to middle
+            //TransmitGraphData(1, data0);
+            //TransmitGraphData(2, (unsigned char) dummy);
+            output = data0;
+            needToTransferOriginal = 1;
+            needToTransferModified = 1;
+        
 			PORTD = (unsigned char)dummy;		// Output to D/A
 			break;
 		case 5:						// Function 5: Low-pass filter
@@ -165,6 +179,11 @@ checkflags:
 			data1 = data0;
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = ((int)data0 + data1 + data1 + data2) / 4;	// smoother
+            //TransmitGraphData(1, data0);
+            //TransmitGraphData(2, (unsigned char) dummy);
+            output = data0;
+            needToTransferOriginal = 1;
+            needToTransferModified = 1;
 			PORTD = (unsigned char)dummy;		// Output to D/A
 			break;
 		case 6:						// Function 6: High-frequency enhancement filter
@@ -173,6 +192,11 @@ checkflags:
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = ((int)data0 + data1 + data1 + data2) / 4;	// smoother
 			dummy = data0 + data0 - dummy;
+            //TransmitGraphData(1, data0);
+            //TransmitGraphData(2, (unsigned char) dummy);
+            output = data0;
+            needToTransferOriginal = 1;
+            needToTransferModified = 1;
 			PORTD = (unsigned char)dummy;		// Output to D/A
 			break;
 		case 7:						// Function 7: 60Hz notch filter
@@ -180,10 +204,19 @@ checkflags:
 			data1 = data0;
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = ((int)data0 + data2) / 2;	// 60 Hz notch
+            //TransmitGraphData(1, data0);
+            //TransmitGraphData(2, (unsigned char) dummy);
+            
+            output = data0;
+            needToTransferOriginal = 1;
+            needToTransferModified = 1;
 			PORTD = (unsigned char)dummy;		// Output to D/A
 			break;
 		case 8:						// Function 8: Median filter
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
+            //TransmitGraphData(1, data0);
+            output = data0;
+            needToTransferOriginal = 1;
 			do_median = 1;			// Flag main() to do median filter
 			break;
 		case 9:						// Function 9: Heart rate meter
@@ -191,6 +224,9 @@ checkflags:
 			TMR0L = 0x44;			// 0xFFFF-0xED44 = 0x12BB = 4795, (205 us delay)
 			data1 = data0;			// Move old ECG sample to data1
 			data0 =  ReadADC();		// Store new ECG sample from ADC to data0
+            //TransmitGraphData(1, data0);
+            output = data0;
+            needToTransferOriginal = 1;
 			PORTBbits.RB2 = !PORTBbits.RB2;	// Toggle RB2 for sampling rate check
 			do_MOBD = 1;			// Flag main() to do MOBD for QRS detection
 			break;
@@ -205,6 +241,7 @@ checkflags:
 			else function--;
 			if (function == 9) SetupADC(1);			// ECG comes from AN1 channel
 			else SetupADC(0);					// Others come from AN0 channel
+            //TransmitFunction();
 			update = 1;				// Signal main() to update LCD dispaly
 			debounce0 = 10;			// Set switch debounce delay counter decremented by TMR0
 		}
@@ -219,6 +256,7 @@ checkflags:
 			else function++;
 			if (function == 9) SetupADC(1);			// ECG comes from AN1 channel
 			else SetupADC(0);					// Others come from AN0 channel
+            //TransmitFunction();
 			update = 1;				// Signal main() to update LCD dispaly
 			debounce1 = 10;			// Set switch debounce delay counter decremented by TMR0
 		}
@@ -227,23 +265,54 @@ checkflags:
 	}
 }
 
-void TransmitGraphData(unsigned char value) {
-    Transmit(1);
+/**
+ * TransmitGraphData
+ * Sends a value over UART to with a tag to identify the type of graph.
+ * @param tag Character value of the identifier.
+ * @param value Character value of the raw data.
+ */
+void TransmitGraphData(unsigned char tag, unsigned char value) {
+    if (bluetoothEnabled == 0) return;
+    
+    Transmit(tag);
     Transmit(value);
 }
 
+/**
+ * TransmitFunction
+ * Sends the current function over UART, with a specified tag of 0.
+ */
 void TransmitFunction() {
+    if (bluetoothEnabled == 0) return;
+    
     Transmit(0);
     Transmit(function);
 }
 
+/**
+ * Transmit
+ * Waits for UART to be ready, then pushes the specified character out.
+ * This method will block until UART is ready again.
+ * @param value Character value to be sent.
+ */
 void Transmit(unsigned char value) {  /********** Send an ASCII Character to USART ***********/
 	while(!PIR1bits.TXIF) continue;		// Wait until USART is ready
 	TXREG = value;						// Send the data
 	while (!PIR1bits.TXIF) continue;	// Wait until USART is ready
-	//Delay_ms (5);						// Wait for 5 ms
+    
+    if (bluetoothEnabled == 0) {
+        Delay_ms(5); // Do we need this?
+    }
 }
 
+/** ** 
+    Start -- LCD Related Functions
+ ** **/
+
+/**
+ * ClearScreen
+ * Clears the connected LCD screen over UART.
+ */
 void ClearScreen(){   /************************** Clear LCD Screen ***************************/
     if (bluetoothEnabled == 1) return;
     
@@ -251,6 +320,11 @@ void ClearScreen(){   /************************** Clear LCD Screen *************
 	Transmit(0x01);					// Available on our course webpage
 }
 
+/**
+ * Backlight
+ * Enables or disables the LCD backlight depending on the value of state(0,1)
+ * @param state Either 1 or 0 to signal the LCD to turn on or off.
+ */
 void Backlight(unsigned char state){  /************* Turn LCD Backlight on/off ***************/
     if (bluetoothEnabled == 1) return;
     
@@ -259,6 +333,11 @@ void Backlight(unsigned char state){  /************* Turn LCD Backlight on/off *
 	else Transmit(0x81);			// otherwise, backlight off
 }
 
+/**
+ * SetPosition
+ * Sets the position of the character writer on the attached LCD.
+ * @param position Character value of the position.
+ */
 void SetPosition(unsigned char position){ 	/********** Set LCD Cursor Position  *************/
     if (bluetoothEnabled == 1) return;
     
@@ -266,6 +345,12 @@ void SetPosition(unsigned char position){ 	/********** Set LCD Cursor Position  
 	Transmit(128 + position);
 }
 
+/**
+ * PrintLine
+ * Prints the specified character string sent.
+ * @param string
+ * @param numChars
+ */
 void PrintLine(rom unsigned char *string, unsigned char numChars){ /**** Print characters ****/
     	unsigned char count;
 
@@ -323,6 +408,10 @@ void PrintNum(unsigned char value1, unsigned char position1){ /** Print number a
 	units = value1 - tens * 10;
 	Transmit(units + 48);			// Convert to ASCII and send
 }
+
+/** ** 
+    End -- LCD Related Functions
+ ** **/
 
 void SetupBluetooth() {
     if (bluetoothEnabled == 0) return;
@@ -390,7 +479,7 @@ unsigned char y;
 }
 
 void main(){   /****************************** Main program **********************************/
-    bluetoothEnabled = 1; // BLUETOOTH
+    bluetoothEnabled = 0; // BLUETOOTH
 	function = mode = LEDcount = counter = debounce0 = debounce1 = 0;	// Initialize
 	display = do_median = do_MOBD = rri_count = 0;
 	threshold = 50;				// Threshold for the MOBD QRS-detection algorithm
@@ -433,6 +522,17 @@ void main(){   /****************************** Main program ********************
 	ClearScreen();				// Clear screen and set cursor to first position
 	PrintLine((rom unsigned char*)"Function", 8);
 	while (1) {
+        if (bluetoothEnabled) {
+            if (needToTransferOriginal) {
+                needToTransferOriginal = 0;
+                TransmitGraphData(1, output);
+            }
+            if (needToTransferModified) {
+                needToTransferModified = 0;
+                TransmitGraphData(2, (unsigned char) dummy);
+            }
+        }
+        
 		if (update) {			// The update flag is set by INT0 or INT1
 			update = 0;			// Reset update flag
             if (function != 0) LEDcount = PORTB = 0;	// Reset LED's
@@ -492,6 +592,8 @@ void main(){   /****************************** Main program ********************
 						}
 					}
 				}
+                
+                TransmitGraphData(2, rank[4]);
 				PORTD = rank[4];			// Median is at rank[4] of rank[0-8]
 				INTCONbits.TMR0IE = 1;		// Enable TMR0 interrupt
 			}
@@ -535,6 +637,7 @@ void main(){   /****************************** Main program ********************
 			}
 			if (display){					// Display Heart Rate in 3 digits
 				hr = 12000/rri_count;		// 60/0.005 = 12000
+                TransmitGraphData(2, hr);
 				rri_count = 0;				// Reset RRI counter
 				PrintNum(hr, 71);			// Isolates each digit and displays
 				display = 0;				// Reset display flag
