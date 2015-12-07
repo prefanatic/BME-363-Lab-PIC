@@ -140,13 +140,11 @@ checkflags:
 				}
 				break;
 			}
-            //TransmitGraphData(1, output);
             needToTransferOriginal = 1;
 			PORTD = output;
 			break;
 		case 2:						// Function 2: Echo
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
-            //TransmitGraphData(1, data0);
             output = data0;
             needToTransferOriginal = 1;
 			PORTD = data0;			// Echo back 
@@ -156,7 +154,6 @@ checkflags:
 			TMR0H = sampling_H;		// Reload TMR0 high-order byte
 			TMR0L = sampling_L;		// Reload TMR0 low-order byte
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
-            //TransmitGraphData(1, data0);
             output = data0;
             needToTransferOriginal = 1;
 			PORTD = data0;			// Echo back 
@@ -166,12 +163,9 @@ checkflags:
 			data1 = data0;			// Store previous data points
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = (int)data0 - data1 + 128;	// Take derivative and shift to middle
-            //TransmitGraphData(1, data0);
-            //TransmitGraphData(2, (unsigned char) dummy);
             output = data0;
             needToTransferOriginal = 1;
             needToTransferModified = 1;
-        
 			PORTD = (unsigned char)dummy;		// Output to D/A
 			break;
 		case 5:						// Function 5: Low-pass filter
@@ -179,8 +173,6 @@ checkflags:
 			data1 = data0;
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = ((int)data0 + data1 + data1 + data2) / 4;	// smoother
-            //TransmitGraphData(1, data0);
-            //TransmitGraphData(2, (unsigned char) dummy);
             output = data0;
             needToTransferOriginal = 1;
             needToTransferModified = 1;
@@ -192,8 +184,6 @@ checkflags:
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
 			dummy = ((int)data0 + data1 + data1 + data2) / 4;	// smoother
 			dummy = data0 + data0 - dummy;
-            //TransmitGraphData(1, data0);
-            //TransmitGraphData(2, (unsigned char) dummy);
             output = data0;
             needToTransferOriginal = 1;
             needToTransferModified = 1;
@@ -203,10 +193,7 @@ checkflags:
 			data2 = data1;			// Store previous data points
 			data1 = data0;
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
-			dummy = ((int)data0 + data2) / 2;	// 60 Hz notch
-            //TransmitGraphData(1, data0);
-            //TransmitGraphData(2, (unsigned char) dummy);
-            
+			dummy = ((int)data0 + data2) / 2;	// 60 Hz notch       
             output = data0;
             needToTransferOriginal = 1;
             needToTransferModified = 1;
@@ -214,7 +201,6 @@ checkflags:
 			break;
 		case 8:						// Function 8: Median filter
 			data0 = ReadADC();		// Read A/D and save the present sample in data0
-            //TransmitGraphData(1, data0);
             output = data0;
             needToTransferOriginal = 1;
 			do_median = 1;			// Flag main() to do median filter
@@ -241,8 +227,7 @@ checkflags:
 			else function--;
 			if (function == 9) SetupADC(1);			// ECG comes from AN1 channel
 			else SetupADC(0);					// Others come from AN0 channel
-            //TransmitFunction();
-			update = 1;				// Signal main() to update LCD dispaly
+			update = 1;				// Signal main() to update LCD display
 			debounce0 = 10;			// Set switch debounce delay counter decremented by TMR0
 		}
 		INTCONbits.INT0IE = 1;		// Enable interrupt
@@ -256,8 +241,7 @@ checkflags:
 			else function++;
 			if (function == 9) SetupADC(1);			// ECG comes from AN1 channel
 			else SetupADC(0);					// Others come from AN0 channel
-            //TransmitFunction();
-			update = 1;				// Signal main() to update LCD dispaly
+			update = 1;				// Signal main() to update LCD display
 			debounce1 = 10;			// Set switch debounce delay counter decremented by TMR0
 		}
 		INTCON3bits.INT1IE = 1;		// Enable interrupt
@@ -301,7 +285,7 @@ void Transmit(unsigned char value) {  /********** Send an ASCII Character to USA
 	while (!PIR1bits.TXIF) continue;	// Wait until USART is ready
     
     if (bluetoothEnabled == 0) {
-        Delay_ms(5); // Do we need this?
+        Delay_ms(5); // Give the LCD some time to listen to what we've got to say.
     }
 }
 
@@ -479,7 +463,7 @@ unsigned char y;
 }
 
 void main(){   /****************************** Main program **********************************/
-    bluetoothEnabled = 0; // BLUETOOTH
+    bluetoothEnabled = 1; // BLUETOOTH
 	function = mode = LEDcount = counter = debounce0 = debounce1 = 0;	// Initialize
 	display = do_median = do_MOBD = rri_count = 0;
 	threshold = 50;				// Threshold for the MOBD QRS-detection algorithm
